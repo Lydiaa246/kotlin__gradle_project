@@ -2,10 +2,63 @@ package org.dbu.library.service
 
 import org.dbu.library.model.Book
 import org.dbu.library.repository.LibraryRepository
+import java.util.Locale
 
 class DefaultLibraryService(
     private val repository: LibraryRepository
 ) : LibraryService {
 
- TODO: implement the methods
+    companion object {
+        const val MAX_BORROW_LIMIT = 5
+    }
+
+    override fun addBook(book: Book): Boolean {
+        return repository.addBook(book)
+    }
+
+    override fun borrowBook(patronId: String, isbn: String): BorrowResult {
+        val book = repository.findBook(isbn) ?: return BorrowResult.BOOK_NOT_FOUND
+        val patron = repository.findPatron(patronId) ?: return BorrowResult.PATRON_NOT_FOUND
+
+        if (!book.isAvailable) {
+            return BorrowResult.NOT_AVAILABLE
+        }
+
+        if (patron.borrowedBooks.size >= MAX_BORROW_LIMIT) {
+            return BorrowResult.LIMIT_REACHED
+        }
+
+        // Mark book as borrowed
+        repository.updateBook(book.copy(isAvailable = false))
+
+        // Add ISBN to patron's borrowed books
+        repository.updatePatron(patron.copy(borrowedBooks = patron.borrowedBooks + isbn))
+
+        return BorrowResult.SUCCESS
+    }
+
+    override fun returnBook(patronId: String, isbn: String): Boolean {
+        val book = repository.findBook(isbn) ?: return false
+        val patron = repository.findPatron(patronId) ?: return false
+
+        if (!patron.borrowedBooks.contains(isbn)) {
+            return false
+        }
+
+        // Mark book as available
+        repository.updateBook(book.copy(isAvailable = true))
+
+        // Remove ISBN from patron's borrowed books
+        repository.updatePatron(patron.copy(borrowedBooks = patron.borrowedBooks - isbn))
+
+        return true
+    }
+
+    override fun search(query: String): List<Book> {
+        val lowerQuery = query.lowercase(Locale.ROOT)
+        return repository.getAllBooks().filter { book ->
+            book.title.lowercase(Locale.ROOT).contains(lowerQuery) ||
+            book.author.lowercase(Locale.ROOT).contains(lowerQuery)
+        }
+    }
 }
